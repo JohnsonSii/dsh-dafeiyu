@@ -212,15 +212,15 @@ final class PetController: NSObject {
     private var petHeight: CGFloat { maxFrameHeight * scale }
 
     private var cardHeightPoints: CGFloat {
-        let footer: CGFloat = balanceSummary.isEmpty ? 0 : 28
+        let footer: CGFloat = balanceSummary.isEmpty ? 0 : 18
         if tasks.count >= 2 {
             let rows = min(tasks.count, 3)
-            return (58 + CGFloat(rows) * 26 + footer) * bubbleScale
+            return (30 + CGFloat(rows) * 17 + footer) * bubbleScale
         }
-        return (84 + footer) * bubbleScale
+        return (48 + footer) * bubbleScale
     }
 
-    private var cardWidthPoints: CGFloat { 420 * bubbleScale }
+    private var cardWidthPoints: CGFloat { 280 * bubbleScale }
 
     private func windowSize() -> NSSize {
         // A hidden card must not keep the window as wide as a 420pt card:
@@ -1000,9 +1000,9 @@ final class PetController: NSObject {
         }
         if !balanceSummary.isEmpty {
             drawText(balanceSummary,
-                     in: NSRect(x: rect.minX + 16 * bubbleScale, y: rect.maxY - 31 * bubbleScale,
-                                width: rect.width - 32 * bubbleScale, height: 23 * bubbleScale),
-                     font: NSFont.systemFont(ofSize: 9 * max(1, bubbleScale)),
+                     in: NSRect(x: rect.minX + 13 * bubbleScale, y: rect.maxY - 21 * bubbleScale,
+                                width: rect.width - 26 * bubbleScale, height: 14 * bubbleScale),
+                     font: NSFont.systemFont(ofSize: 8.5 * max(1, bubbleScale)),
                      color: Self.hex("#53616F"))
         }
     }
@@ -1024,11 +1024,11 @@ final class PetController: NSObject {
         cardPath.lineWidth = 1
         cardPath.stroke()
 
-        let iconCenter = NSPoint(x: rect.maxX - 34 * s, y: rect.minY + 42 * s)
+        let iconCenter = NSPoint(x: rect.maxX - 26 * s, y: rect.midY)
         drawStatusIcon(center: iconCenter, state: card.state, scale: s)
 
-        let textX = rect.minX + 16 * s
-        let textWidth = max(40, rect.width - 102 * s)
+        let textX = rect.minX + 13 * s
+        let textWidth = max(40, rect.width - 62 * s)
         // 字号不随气泡等比缩小：缩小卡片只压缩几何尺寸（宽度、内边距、文字框），
         // 字号保持基准大小。否则 bubbleScale 取下限 0.8 时标题会被缩到 8.8pt 而难以辨认。
         // 放大方向仍跟随 bubbleScale（上限 1.2），保持原有观感。
@@ -1037,13 +1037,13 @@ final class PetController: NSObject {
         let detailFont = NSFont.systemFont(ofSize: max(7.0, 9.0 * fontScale))
         drawText(
             card.title,
-            in: NSRect(x: textX, y: rect.minY + 15 * s, width: textWidth, height: max(12, 27 * s)),
+            in: NSRect(x: textX, y: rect.minY + 6 * s, width: textWidth, height: max(12, 17 * s)),
             font: titleFont,
             color: Self.hex("#25282D")
         )
         drawText(
             card.detail,
-            in: NSRect(x: textX, y: rect.minY + 43 * s, width: textWidth, height: max(12, 24 * s)),
+            in: NSRect(x: textX, y: rect.minY + 25 * s, width: textWidth, height: max(12, 16 * s)),
             font: detailFont,
             color: Self.hex("#747981")
         )
@@ -1051,52 +1051,53 @@ final class PetController: NSObject {
 
     private func drawStatusIcon(center: NSPoint, state: String, scale s: CGFloat) {
         let (bgHex, fgHex) = Self.statusColors[state] ?? ("#ECEEF1", "#747A84")
-        let radius: CGFloat = 23 * s
+        let radius: CGFloat = 14 * s
+        let u: CGFloat = 9 * s
         Self.hex(bgHex).setFill()
         NSBezierPath(ovalIn: NSRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)).fill()
 
         let foreground = Self.hex(fgHex)
-        let lineWidth: CGFloat = 3 * s
+        let lineWidth: CGFloat = 2.2 * s
         switch state {
         case "SUCCESS":
-            strokeLine(from: NSPoint(x: center.x - 10 * s, y: center.y),
-                       to: NSPoint(x: center.x - 3 * s, y: center.y + 8 * s),
+            strokeLine(from: NSPoint(x: center.x - u * 0.9, y: center.y),
+                       to: NSPoint(x: center.x - u * 0.25, y: center.y + u * 0.7),
                        width: lineWidth, color: foreground)
-            strokeLine(from: NSPoint(x: center.x - 3 * s, y: center.y + 8 * s),
-                       to: NSPoint(x: center.x + 12 * s, y: center.y - 10 * s),
+            strokeLine(from: NSPoint(x: center.x - u * 0.25, y: center.y + u * 0.7),
+                       to: NSPoint(x: center.x + u * 1.05, y: center.y - u * 0.9),
                        width: lineWidth, color: foreground)
         case "ERROR":
-            strokeLine(from: NSPoint(x: center.x - 8 * s, y: center.y - 8 * s),
-                       to: NSPoint(x: center.x + 8 * s, y: center.y + 8 * s),
+            strokeLine(from: NSPoint(x: center.x - u * 0.7, y: center.y - u * 0.7),
+                       to: NSPoint(x: center.x + u * 0.7, y: center.y + u * 0.7),
                        width: lineWidth, color: foreground)
-            strokeLine(from: NSPoint(x: center.x + 8 * s, y: center.y - 8 * s),
-                       to: NSPoint(x: center.x - 8 * s, y: center.y + 8 * s),
+            strokeLine(from: NSPoint(x: center.x + u * 0.7, y: center.y - u * 0.7),
+                       to: NSPoint(x: center.x - u * 0.7, y: center.y + u * 0.7),
                        width: lineWidth, color: foreground)
         case "WAITING":
-            strokeLine(from: NSPoint(x: center.x, y: center.y - 10 * s),
-                       to: NSPoint(x: center.x, y: center.y + 3 * s),
+            strokeLine(from: NSPoint(x: center.x, y: center.y - u * 0.9),
+                       to: NSPoint(x: center.x, y: center.y + u * 0.25),
                        width: lineWidth, color: foreground)
             foreground.setFill()
-            NSBezierPath(ovalIn: NSRect(x: center.x - 2 * s, y: center.y + 9 * s, width: 4 * s, height: 4 * s)).fill()
+            NSBezierPath(ovalIn: NSRect(x: center.x - u * 0.18, y: center.y + u * 0.72, width: u * 0.36, height: u * 0.36)).fill()
         case "THINKING", "WORKING":
             foreground.setFill()
-            for offset in [-9.0, 0.0, 9.0] {
-                NSBezierPath(ovalIn: NSRect(x: center.x + CGFloat(offset) * s - 3 * s,
-                                            y: center.y - 3 * s,
-                                            width: 6 * s,
-                                            height: 6 * s)).fill()
+            for offset in [-0.8, 0.0, 0.8] {
+                NSBezierPath(ovalIn: NSRect(x: center.x + CGFloat(offset) * u - u * 0.2,
+                                            y: center.y - u * 0.2,
+                                            width: u * 0.4,
+                                            height: u * 0.4)).fill()
             }
         default:
             foreground.setFill()
-            NSBezierPath(ovalIn: NSRect(x: center.x - 5 * s, y: center.y - 5 * s, width: 10 * s, height: 10 * s)).fill()
+            NSBezierPath(ovalIn: NSRect(x: center.x - u * 0.45, y: center.y - u * 0.45, width: u * 0.9, height: u * 0.9)).fill()
         }
     }
 
     private func drawTaskCard(rect: NSRect) {
         let s = bubbleScale
-        let corner: CGFloat = 16 * s
+        let corner: CGFloat = 12 * s
         NSColor(calibratedWhite: 0.05, alpha: 0.05).setFill()
-        NSBezierPath(roundedRect: NSRect(x: rect.minX + 1, y: rect.minY + 6, width: rect.width - 2, height: rect.height),
+        NSBezierPath(roundedRect: NSRect(x: rect.minX + 1, y: rect.minY + 5, width: rect.width - 2, height: rect.height),
                      xRadius: corner, yRadius: corner).fill()
         let cardPath = NSBezierPath(roundedRect: rect, xRadius: corner, yRadius: corner)
         NSColor(calibratedRed: 0.988, green: 0.988, blue: 0.992, alpha: 0.97).setFill()
@@ -1105,8 +1106,8 @@ final class PetController: NSObject {
         cardPath.lineWidth = 1
         cardPath.stroke()
 
-        let textX = rect.minX + 16 * s
-        let textWidth = max(40, rect.width - 32 * s)
+        let textX = rect.minX + 13 * s
+        let textWidth = max(40, rect.width - 26 * s)
         // 字号不随气泡等比缩小：缩小卡片只压缩几何尺寸（宽度、内边距、文字框），
         // 字号保持基准大小。否则 bubbleScale 取下限 0.8 时标题会被缩到 8.8pt 而难以辨认。
         // 放大方向仍跟随 bubbleScale（上限 1.2），保持原有观感。
@@ -1115,13 +1116,13 @@ final class PetController: NSObject {
         let detailFont = NSFont.systemFont(ofSize: max(7.0, 9.0 * fontScale))
         drawText(
             "\(tasks.count) 个任务进行中",
-            in: NSRect(x: textX, y: rect.minY + 10 * s, width: textWidth, height: max(12, 22 * s)),
+            in: NSRect(x: textX, y: rect.minY + 6 * s, width: textWidth, height: max(12, 17 * s)),
             font: titleFont,
             color: Self.hex("#25282D")
         )
 
         for (index, task) in tasks.prefix(3).enumerated() {
-            let rowY = rect.minY + (36 + CGFloat(index) * 24) * s
+            let rowY = rect.minY + (25 + CGFloat(index) * 17) * s
             let state = Self.stringValue(task["state"]) ?? "IDLE"
             let stateLabel = Self.labels[state] ?? state
             let label = Self.stringValue(task["project"])
@@ -1131,10 +1132,10 @@ final class PetController: NSObject {
             let line = "\(stateLabel) · \(label)"
             let (_, fgHex) = Self.statusColors[state] ?? ("#ECEEF1", "#747A84")
             Self.hex(fgHex).setFill()
-            NSBezierPath(ovalIn: NSRect(x: textX, y: rowY + 4 * s, width: 8 * s, height: 8 * s)).fill()
+            NSBezierPath(ovalIn: NSRect(x: textX, y: rowY + 3 * s, width: 6 * s, height: 6 * s)).fill()
             drawText(
                 line,
-                in: NSRect(x: textX + 14 * s, y: rowY, width: textWidth - 14 * s, height: max(12, 20 * s)),
+                in: NSRect(x: textX + 11 * s, y: rowY, width: textWidth - 11 * s, height: max(12, 15 * s)),
                 font: detailFont,
                 color: Self.hex("#747981")
             )
@@ -1142,8 +1143,8 @@ final class PetController: NSObject {
         if tasks.count > 3 {
             drawText(
                 "还有 \(tasks.count - 3) 个任务…",
-                in: NSRect(x: textX + 14 * s, y: rect.minY + (36 + 3 * 24) * s,
-                           width: textWidth, height: max(12, 20 * s)),
+                in: NSRect(x: textX + 11 * s, y: rect.minY + (25 + 3 * 17) * s,
+                           width: textWidth, height: max(12, 15 * s)),
                 font: detailFont,
                 color: Self.hex("#9AA0A6")
             )

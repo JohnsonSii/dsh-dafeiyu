@@ -10,3 +10,6 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .dsh-phase0/
+
+.idea/
+.preview/
