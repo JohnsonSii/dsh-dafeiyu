@@ -32,6 +32,11 @@ final class AnimationModel {
     private var workingActivityMap: [String: String] = [:]
     private(set) var idleMicroClips: [String] = []
     private var idleMicroIntervalsMs: [String: [Int]] = [:]
+    /// Celebration pool. DSH turns finish often enough that one clip reads as a
+    /// loop, so rotate through the variants instead of replaying `success`.
+    private var successVariants: [String] = []
+    private var successCursor = 0
+    private var lastSuccessClip: String?
     private var interactionCooldownMs = 1200
     private var lastInteractionMs: Int?
     private var lastIdleMicro: String?
@@ -63,6 +68,9 @@ final class AnimationModel {
         if let map = manifest["stateMap"] as? [String: String] { stateMap = map }
         if let map = manifest["workingActivityMap"] as? [String: String] { workingActivityMap = map }
         if let micros = manifest["idleMicroClips"] as? [String] { idleMicroClips = micros }
+        if let variants = manifest["successVariants"] as? [String] {
+            successVariants = variants.filter { clips[$0] != nil }
+        }
         idleMicroIntervalsMs = manifest["idleMicroIntervalsMs"] as? [String: [Int]] ?? [
             "quiet": [45000, 90000], "normal": [25000, 45000], "lively": [12000, 22000],
         ]
@@ -93,9 +101,12 @@ final class AnimationModel {
 
     func applyState(_ state: String, activity: String? = nil) {
         guard Self.states.contains(state) else { return }
+        let wasSuccess = baseState == "SUCCESS"
         baseState = state
         baseActivity = activity
-        baseClipName = clip(for: state, activity: activity)
+        baseClipName = state == "SUCCESS" && !wasSuccess
+            ? nextSuccessClip()
+            : clip(for: state, activity: activity)
         if state != "IDLE" {
             pulseState = nil
             pulseDeadlineMs = nil
@@ -191,6 +202,19 @@ final class AnimationModel {
             frameIndex = clip.frames.count - 1
             frameElapsedMs = 0
         }
+    }
+
+    /// Rotate the celebration pool, never repeating the clip just played.
+    private func nextSuccessClip() -> String {
+        guard !successVariants.isEmpty else { return clip(for: "SUCCESS", activity: nil) }
+        var name = successVariants[successCursor % successVariants.count]
+        successCursor += 1
+        if successVariants.count > 1, name == lastSuccessClip {
+            name = successVariants[successCursor % successVariants.count]
+            successCursor += 1
+        }
+        lastSuccessClip = name
+        return name
     }
 
     func clip(for state: String, activity: String?) -> String {
