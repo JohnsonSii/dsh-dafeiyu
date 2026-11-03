@@ -222,6 +222,12 @@ final class PetController: NSObject {
 
     private var cardWidthPoints: CGFloat { 280 * bubbleScale }
 
+    /// Every frame carries transparent headroom above the character (about 18%
+    /// of the canvas at rest, less in clips whose ahoge rises higher). Dropping
+    /// the card into that headroom closes the empty band between the two
+    /// without covering anything the character draws.
+    private var cardHeadroomOverlap: CGFloat { petHeight * 0.08 }
+
     private func windowSize() -> NSSize {
         // A hidden card must not keep the window as wide as a 420pt card:
         // at scale 0.55 that left roughly 385pt of mostly transparent window
@@ -229,7 +235,7 @@ final class PetController: NSObject {
         let showsCard = bubbleMode != "hidden"
         return NSSize(
             width: showsCard ? max(petWidth + 50, cardWidthPoints + 28) : petWidth + 50,
-            height: petHeight + (showsCard ? cardHeightPoints + 34 : 26)
+            height: petHeight + (showsCard ? cardHeightPoints + 34 - cardHeadroomOverlap : 26)
         )
     }
 
