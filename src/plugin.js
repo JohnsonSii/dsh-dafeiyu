@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Schema from '@deepseek-ai/schemastery'
@@ -31,6 +31,7 @@ export const EVENTS_ENDPOINT = '/plugins/dsh-dafeiyu/events'
 export const MANIFEST_ENDPOINT = '/plugins/dsh-dafeiyu/manifest'
 export const FRAME_ENDPOINT = '/plugins/dsh-dafeiyu/frame'
 export const VISIBILITY_ENDPOINT = '/plugins/dsh-dafeiyu/visibility'
+export const REPORT_ENDPOINT = '/plugins/dsh-dafeiyu/report'
 export { BALANCE_ENDPOINT }
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -599,6 +600,25 @@ function mountCompanion(ctx, config = {}, eventCtx = ctx, logger) {
           },
         }),
         'dsh-dafeiyu: pet visibility endpoint',
+      )
+      httpCtx.effect(
+        () => httpCtx.webServer.register({
+          kind: 'exact',
+          path: REPORT_ENDPOINT,
+          handler: async (req, res) => {
+            if (!isLocalRequest(req)) return jsonResponse(res, 403, { error: 'local access only' })
+            if (req.method !== 'POST') return jsonResponse(res, 405, { error: 'method not allowed' })
+            try {
+              const body = await readJsonBody(req, 8192)
+              const reportPath = join(dirname(defaultHelperLogPath()), 'client-report.log')
+              appendFileSync(reportPath, `${JSON.stringify({ at: new Date().toISOString(), ...body })}\n`)
+              jsonResponse(res, 200, { ok: true })
+            } catch (error) {
+              jsonResponse(res, 400, { error: error instanceof Error ? error.message : String(error) })
+            }
+          },
+        }),
+        'dsh-dafeiyu: client report endpoint',
       )
       const assetRoutes = createAssetRoutes()
       if (assetRoutes) {
