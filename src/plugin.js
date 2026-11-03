@@ -30,6 +30,7 @@ export const CONFIG_ENDPOINT = '/plugins/dsh-dafeiyu/config'
 export const EVENTS_ENDPOINT = '/plugins/dsh-dafeiyu/events'
 export const MANIFEST_ENDPOINT = '/plugins/dsh-dafeiyu/manifest'
 export const FRAME_ENDPOINT = '/plugins/dsh-dafeiyu/frame'
+export const VISIBILITY_ENDPOINT = '/plugins/dsh-dafeiyu/visibility'
 export { BALANCE_ENDPOINT }
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -108,6 +109,17 @@ function publicConfig(config = {}) {
     balanceEnabled: config.balanceEnabled !== false,
     balanceSource: config.balanceSource ?? defaults.balanceSource,
   }
+}
+
+async function readJsonBody(req, limit = 2048) {
+  const chunks = []
+  let bytes = 0
+  for await (const chunk of req) {
+    bytes += chunk.length
+    if (bytes > limit) throw new Error('request body is too large')
+    chunks.push(chunk)
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 
 async function readPatch(req) {
@@ -567,6 +579,26 @@ function mountCompanion(ctx, config = {}, eventCtx = ctx, logger) {
       httpCtx.effect(
         () => httpCtx.webServer.register({ kind: 'exact', path: BALANCE_ENDPOINT, handler: createBalanceHandler(balance) }),
         'dsh-dafeiyu: local balance endpoint',
+      )
+      httpCtx.effect(
+        () => httpCtx.webServer.register({
+          kind: 'exact',
+          path: VISIBILITY_ENDPOINT,
+          handler: async (req, res) => {
+            if (!isLocalRequest(req)) return jsonResponse(res, 403, { error: 'local access only' })
+            if (req.method !== 'POST') return jsonResponse(res, 405, { error: 'method not allowed' })
+            if (!bridge) return jsonResponse(res, 503, { error: 'companion runtime is not running' })
+            try {
+              const body = await readJsonBody(req)
+              if (typeof body?.visible !== 'boolean') throw new Error('visible must be a boolean')
+              bridge.send(createMessage(CompanionMessageKind.VISIBILITY, { visible: body.visible }))
+              jsonResponse(res, 200, { ok: true, visible: body.visible })
+            } catch (error) {
+              jsonResponse(res, 400, { error: error instanceof Error ? error.message : String(error) })
+            }
+          },
+        }),
+        'dsh-dafeiyu: pet visibility endpoint',
       )
       const assetRoutes = createAssetRoutes()
       if (assetRoutes) {

@@ -557,6 +557,17 @@ final class PetController: NSObject {
         contentView?.needsDisplay = true
     }
 
+    /// The in-page home view owns the character while it is open, so the
+    /// desktop panel steps aside instead of drawing a second copy.
+    private func setPetVisible(_ visible: Bool) {
+        guard let panel = panel else { return }
+        if visible {
+            panel.orderFrontRegardless()
+        } else {
+            panel.orderOut(nil)
+        }
+    }
+
     func handleClick(at point: NSPoint, clickCount: Int) {
         sleepTimer?.invalidate()
         if model.isSleeping { model.wake() }
@@ -760,6 +771,8 @@ final class PetController: NSObject {
             if message["alert"] as? String == "APPROVAL" {
                 notifyAlert("APPROVAL")
             }
+        case "visibility":
+            if let visible = message["visible"] as? Bool { setPetVisible(visible) }
         default:
             break
         }
