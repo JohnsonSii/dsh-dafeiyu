@@ -108,6 +108,7 @@ final class PetController: NSObject {
     private var keepFrontTimer: Timer?
     private var microTimer: Timer?
     private var sleepTimer: Timer?
+    private var petHidden = false
     private var lastBalanceValue: Double?
     private var clickThroughTimer: Timer?
     /// A native menu runs its own tracking loop; keep the panel interactive
@@ -359,7 +360,7 @@ final class PetController: NSObject {
     }
 
     func show() {
-        guard !isHeadless() else { return }
+        guard !isHeadless(), !petHidden else { return }
         panel?.orderFrontRegardless()
         keepFront()
         updateClickThrough()
@@ -424,7 +425,7 @@ final class PetController: NSObject {
     }
 
     private func keepFront() {
-        guard let panel = panel, !quitting else { return }
+        guard let panel = panel, !quitting, !petHidden else { return }
         // Re-assert every 2 s: other apps or full-screen transitions can reset
         // the level/collection behavior, which would hide the pet.
         panel.level = .floating
@@ -561,6 +562,7 @@ final class PetController: NSObject {
     /// desktop panel steps aside instead of drawing a second copy.
     private func setPetVisible(_ visible: Bool) {
         guard let panel = panel else { return }
+        petHidden = !visible
         if visible {
             panel.orderFrontRegardless()
         } else {
