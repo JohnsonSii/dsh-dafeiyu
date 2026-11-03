@@ -38,6 +38,22 @@ final class AnimationModel {
     private var successCursor = 0
     private var lastSuccessClip: String?
     private var interactionCooldownMs = 1200
+    /// Per-body-part click responses and per-completion error reactions. Both
+    /// pools rotate so a frequent click does not replay one clip forever.
+    private var interactionVariants: [String: [String]] = [:]
+    private var interactionCursors: [String: Int] = [:]
+    private var lastInteractionClip: [String: String] = [:]
+    private var interactionClipNames: Set<String> = ["head_pat", "poke", "tail"]
+    private var errorVariants: [String] = []
+    private var errorCursor = 0
+    private var lastErrorClip: String?
+    /// Sleep sequence: idle long enough, play `start`, hold `loop`, and play
+    /// `end` when anything asks for attention again.
+    private(set) var sleepStart: String?
+    private(set) var sleepLoop: String?
+    private(set) var sleepEnd: String?
+    private(set) var sleepAfterMs = 600_000
+    private(set) var isSleeping = false
     private var lastInteractionMs: Int?
     private var lastIdleMicro: String?
 
@@ -71,6 +87,19 @@ final class AnimationModel {
         if let variants = manifest["successVariants"] as? [String] {
             successVariants = variants.filter { clips[$0] != nil }
         }
+        if let variants = manifest["errorVariants"] as? [String] {
+            errorVariants = variants.filter { clips[$0] != nil }
+        }
+        if let variants = manifest["interactionVariants"] as? [String: [String]] {
+            interactionVariants = variants.mapValues { $0.filter { clips[$0] != nil } }
+            for pool in interactionVariants.values { interactionClipNames.formUnion(pool) }
+        }
+        if let sleep = manifest["sleep"] as? [String: Any] {
+            sleepStart = sleep["start"] as? String
+            sleepLoop = sleep["loop"] as? String
+            sleepEnd = sleep["end"] as? String
+            if let after = sleep["afterMs"] as? Int { sleepAfterMs = after }
+        }
         idleMicroIntervalsMs = manifest["idleMicroIntervalsMs"] as? [String: [Int]] ?? [
             "quiet": [45000, 90000], "normal": [25000, 45000], "lively": [12000, 22000],
         ]
@@ -102,11 +131,17 @@ final class AnimationModel {
     func applyState(_ state: String, activity: String? = nil) {
         guard Self.states.contains(state) else { return }
         let wasSuccess = baseState == "SUCCESS"
+        let wasError = baseState == "ERROR"
+        if isSleeping { wake() }
         baseState = state
         baseActivity = activity
-        baseClipName = state == "SUCCESS" && !wasSuccess
-            ? nextSuccessClip()
-            : clip(for: state, activity: activity)
+        if state == "SUCCESS", !wasSuccess {
+            baseClipName = nextSuccessClip()
+        } else if state == "ERROR", !wasError {
+            baseClipName = nextErrorClip()
+        } else {
+            baseClipName = clip(for: state, activity: activity)
+        }
         if state != "IDLE" {
             pulseState = nil
             pulseDeadlineMs = nil
@@ -152,9 +187,9 @@ final class AnimationModel {
 
     @discardableResult
     func playInteraction(_ clipName: String, nowMs: Int) -> Bool {
-        guard Self.interactionClips.contains(clipName), pulseState == nil else { return false }
+        guard interactionClipNames.contains(clipName), pulseState == nil else { return false }
         let current = overlayClipName ?? ""
-        guard !Self.interactionClips.contains(current), !Self.dragClips.contains(current) else { return false }
+        guard !interactionClipNames.contains(current), !Self.dragClips.contains(current) else { return false }
         if let last = lastInteractionMs, nowMs - last < interactionCooldownMs { return false }
         guard playOverlay(clipName) else { return false }
         lastInteractionMs = nowMs
@@ -196,11 +231,61 @@ final class AnimationModel {
         } else if clip.loop {
             frameIndex = nextFrame % clip.frames.count
         } else if overlayClipName != nil {
+            let finished = overlayClipName
             overlayClipName = nil
-            activate(underlayClipName)
+            if isSleeping, finished == sleepStart, let loop = sleepLoop, clips[loop] != nil {
+                _ = playOverlay(loop)
+            } else {
+                activate(underlayClipName)
+            }
         } else {
             frameIndex = clip.frames.count - 1
             frameElapsedMs = 0
+        }
+    }
+
+    /// Rotate the error pool, never repeating the clip just played.
+    private func nextErrorClip() -> String {
+        guard !errorVariants.isEmpty else { return clip(for: "ERROR", activity: nil) }
+        var name = errorVariants[errorCursor % errorVariants.count]
+        errorCursor += 1
+        if errorVariants.count > 1, name == lastErrorClip {
+            name = errorVariants[errorCursor % errorVariants.count]
+            errorCursor += 1
+        }
+        lastErrorClip = name
+        return name
+    }
+
+    /// Pick the next clip for one click target, cycling its pool.
+    func nextInteractionClip(for part: String) -> String {
+        let pool = interactionVariants[part] ?? []
+        guard !pool.isEmpty else { return part }
+        let cursor = interactionCursors[part] ?? 0
+        var index = cursor % pool.count
+        if pool.count > 1, pool[index] == lastInteractionClip[part] { index = (index + 1) % pool.count }
+        let name = pool[index]
+        interactionCursors[part] = cursor + 1
+        lastInteractionClip[part] = name
+        return name
+    }
+
+    /// Enter the sleep sequence when the pet has been idle long enough.
+    func beginSleep() {
+        guard let start = sleepStart, let loop = sleepLoop,
+              clips[start] != nil, clips[loop] != nil,
+              !isSleeping, baseState == "IDLE", overlayClipName == nil, pulseState == nil else { return }
+        isSleeping = true
+        _ = playOverlay(start)
+    }
+
+    /// Leave sleep by playing the wake-up clip; the base state resumes after it.
+    func wake() {
+        guard isSleeping else { return }
+        isSleeping = false
+        if let end = sleepEnd, clips[end] != nil {
+            overlayClipName = end
+            activate(end)
         }
     }
 

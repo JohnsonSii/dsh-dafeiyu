@@ -107,6 +107,8 @@ final class PetController: NSObject {
     private var animTimer: Timer?
     private var keepFrontTimer: Timer?
     private var microTimer: Timer?
+    private var sleepTimer: Timer?
+    private var lastBalanceValue: Double?
     private var clickThroughTimer: Timer?
     /// A native menu runs its own tracking loop; keep the panel interactive
     /// until it closes so the timer cannot steal the selection click.
@@ -394,6 +396,7 @@ final class PetController: NSObject {
         }
         updateClickThrough()
         scheduleMicro()
+        restartSleepTimer()
     }
 
     /// AppKit routes a click to this panel before it ever reaches the view
@@ -507,6 +510,8 @@ final class PetController: NSObject {
         dragPetOffsetX = rect.minX
         dragPetOffsetY = rect.minY
         microTimer?.invalidate()
+        sleepTimer?.invalidate()
+        if model.isSleeping { model.wake() }
         // `dragging` is a dangling loop: keep it advancing while the pointer
         // moves the window, otherwise the pet sits on its first frame and looks
         // frozen. Reduced motion keeps the previous frozen behaviour.
@@ -553,20 +558,50 @@ final class PetController: NSObject {
     }
 
     func handleClick(at point: NSPoint, clickCount: Int) {
+        sleepTimer?.invalidate()
+        if model.isSleeping { model.wake() }
         if clickCount >= 2 {
-            playInteraction("head_pat", message: "好啦好啦，知道你喜欢我~")
+            playInteraction(model.nextInteractionClip(for: "head_pat"), message: "好啦好啦，知道你喜欢我~")
             return
         }
         let rect = petRect()
         let relativeX = max(0, point.x - rect.minX)
         let relativeY = max(0, point.y - rect.minY)
         if relativeY < rect.height * 0.45 {
-            playInteraction("head_pat", message: "摸摸也不能让我少干活哦~")
+            playInteraction(model.nextInteractionClip(for: "head_pat"), message: "摸摸也不能让我少干活哦~")
         } else if relativeX > rect.width * 0.72 {
-            playInteraction("tail", message: "尾巴不是进度条啦！")
+            playInteraction(model.nextInteractionClip(for: "tail"), message: "尾巴不是进度条啦！")
         } else {
-            playInteraction("poke", message: "戳我干嘛，任务还在跑呢")
+            playInteraction(model.nextInteractionClip(for: "poke"), message: "戳我干嘛，任务还在跑呢")
         }
+        contentView?.needsDisplay = true
+    }
+
+    /// Arm the sleep sequence; any interaction or state change disarms it.
+    private func restartSleepTimer() {
+        sleepTimer?.invalidate()
+        guard model.sleepStart != nil, !reducedMotion else { return }
+        sleepTimer = Timer.scheduledTimer(
+            withTimeInterval: Double(model.sleepAfterMs) / 1000, repeats: false
+        ) { [weak self] _ in
+            guard let self = self, !self.dragging, self.model.baseState == "IDLE" else { return }
+            self.model.beginSleep()
+            self.contentView?.needsDisplay = true
+        }
+    }
+
+    /// Play a balance reaction when the reported total actually moved.
+    private func playBalanceReaction() {
+        let digits = balanceSummary.filter { $0.isNumber || $0 == "." }
+        guard let value = Double(digits) else { return }
+        guard let previous = lastBalanceValue else {
+            lastBalanceValue = value
+            return
+        }
+        lastBalanceValue = value
+        guard abs(value - previous) > 0.005 else { return }
+        let clip = value <= 0.005 ? "balance_empty" : (value > previous ? "balance_full" : "balance_worry")
+        guard model.playOverlay(clip) else { return }
         contentView?.needsDisplay = true
     }
 
@@ -718,6 +753,7 @@ final class PetController: NSObject {
             applyConfig(message)
         case "balance":
             balanceSummary = String((message["summary"] as? String ?? "").prefix(200))
+            playBalanceReaction()
             resizeAndReposition()
             contentView?.needsDisplay = true
         case "alert":
@@ -728,7 +764,10 @@ final class PetController: NSObject {
             break
         }
         syncFrameTransition(previousFrame: previousFrame, previousClip: previousClip)
-        if previousState != model.baseState { scheduleMicro() }
+        if previousState != model.baseState {
+            scheduleMicro()
+            if model.baseState == "IDLE" { restartSleepTimer() } else { sleepTimer?.invalidate() }
+        }
         maybeSaveSnapshot()
     }
 
